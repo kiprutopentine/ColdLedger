@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ColdLedger breach timeline</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2230;
+    --ink: #e6edf3;
+    --muted: #8b98a9;
+    --cold: #3b82f6;
+    --warn: #f59e0b;
+    --breach: #ef4444;
+    --ok: #22c55e;
+    --border: #2b3647;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 0.95rem; }
+  .headline {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--breach);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .headline.clear { border-left-color: var(--ok); }
+  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
+  .ex {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 16px;
+  }
+  .ex .sensor { font-weight: 600; }
+  .ex .span { color: var(--muted); font-size: 0.9rem; grid-column: 1; }
+  .ex .nums { text-align: right; grid-column: 2; grid-row: 1 / span 2; }
+  .ex .peak { color: var(--breach); font-weight: 600; font-size: 1.1rem; }
+  .ex .dur { color: var(--warn); font-size: 0.9rem; }
+  .disclaimer {
+    margin-top: 28px;
+    padding: 14px 18px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+  .loading { color: var(--muted); }
+  code { color: var(--cold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ColdLedger</h1>
+  <p class="sub">Cold-chain breach timeline for the replayed day.</p>
+
+  <div id="headline" class="headline loading">loading timeline...</div>
+  <div id="meta" class="meta"></div>
+
+  <div id="list"></div>
+
+  <div class="disclaimer" id="disclaimer"></div>
+</div>
+
+<script>
+async function load() {
+  const res = await fetch('/api/timeline?day=2026-10-12');
+  const data = await res.json();
+
+  const headline = document.getElementById('headline');
+  headline.textContent = data.headline;
+  headline.classList.remove('loading');
+  if (!data.excursions.length) headline.classList.add('clear');
+
+  document.getElementById('meta').innerHTML =
+    'Day ' + data.day + ' · threshold ' + data.threshold_c +
+    'C sustained \u2265 ' + data.sustain_minutes + ' min';
+
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  for (const e of data.excursions) {
+    const fmt = t => t.slice(11, 16);
+    const div = document.createElement('div');
+    div.className = 'ex';
+    div.innerHTML =
+      '<div class="sensor">' + e.sensor_id + '</div>' +
+      '<div class="span">' + fmt(e.start) + ' \u2192 ' + fmt(e.end) + '</div>' +
+      '<div class="nums"><div class="peak">' + e.max_temp + 'C peak</div>' +
+      '<div class="dur">' + e.minutes_over + ' min over</div></div>';
+    list.appendChild(div);
+  }
+
+  document.getElementById('disclaimer').textContent = data.disclaimer;
+}
+load();
+</script>
+</body>
+</html>
