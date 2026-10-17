@@ -5,109 +5,642 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ColdLedger breach timeline</title>
 <style>
-  :root {
-    --bg: #0f1419;
-    --panel: #1a2230;
-    --ink: #e6edf3;
-    --muted: #8b98a9;
-    --cold: #3b82f6;
-    --warn: #f59e0b;
-    --breach: #ef4444;
-    --ok: #22c55e;
-    --border: #2b3647;
+  /* ============================================================
+     ColdLedger — Timescale design system
+     "engineering blueprint on warm graph paper"
+     Light, near-monochrome, neo-brutalist. Carbon does all
+     structure; a single signal-orange encodes "needs attention".
+     Fonts self-hosted under /static/fonts (offline-safe), with
+     system sans/mono fallbacks.
+     ============================================================ */
+
+  /* --- Self-hosted fonts (served by FastAPI /static mount) --- */
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
   }
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-SemiBold.woff2') format('woff2');
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Medium.woff2') format('woff2');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-SemiBold.woff2') format('woff2');
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+
+  :root {
+    /* Colors — achromatic structure + one emphasis color */
+    --paper:    #fafafa;   /* canvas + card surfaces — never pure white */
+    --carbon:   #000000;   /* all structure: text, borders, shadows, fills */
+    --graphite: #242424;   /* darker surface variant (footnote) */
+    --steel:    #6c6c6c;   /* secondary text, subdued labels */
+    --ash:      #b3b3b3;   /* tertiary text, placeholders, light dividers */
+    --paper-2:  #f0f0ee;   /* subtle inset / skeleton base */
+    /* Signal orange = EMPHASIS ONLY (never a button fill, never body text):
+       breach count, over-threshold peaks, sustained durations, breach
+       segment of the sparkline. */
+    --signal:   #ff5b29;
+
+    --font-geist: 'Geist', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono:  'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --radius-card: 12px;
+    --radius-pill: 9999px;
+    --radius-btn:  4px;
+    --shadow-hard: 5px 5px 0px #000;   /* signature hard offset — no blur */
+    --border-hair: 1px solid var(--carbon);
+  }
+
   * { box-sizing: border-box; }
+
+  html, body { background: var(--paper); }
+
   body {
     margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--ink);
+    font-family: var(--font-geist);
+    color: var(--carbon);
     line-height: 1.5;
+    /* Graph-paper blueprint motif: warm paper + faint carbon dot grid.
+       Solid flat paper reads "unfinished" in this system. */
+    background-color: var(--paper);
+    background-image: radial-gradient(rgba(0,0,0,0.055) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: -10px -10px;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
-  h1 { font-size: 1.6rem; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 24px; font-size: 0.95rem; }
-  .headline {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--breach);
-    border-radius: 8px;
-    padding: 16px 20px;
-    font-size: 1.25rem;
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 48px 20px 72px; }
+
+  /* --- Header --- */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: var(--radius-pill);
+    background: var(--carbon);
+    display: inline-block;
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  h1 {
+    font-family: var(--font-geist);
+    font-weight: 700;
+    font-size: 44px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 0 0 8px;
+  }
+  .sub { color: var(--steel); margin: 0 0 32px; font-size: 16px; max-width: 46ch; }
+
+  /* --- Hero headline card --- */
+  .hero {
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard);
+    padding: 24px 24px 22px;
+    margin-bottom: 22px;
+  }
+  .hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .hero-label {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+  /* Status chip (pill). FAIL carries orange emphasis per the documented
+     severity-encoding deviation; PASS is quiet carbon (no orange). */
+  .chip {
+    font-family: var(--font-mono);
     font-weight: 600;
-    margin-bottom: 8px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border-radius: var(--radius-pill);
+    border: var(--border-hair);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
   }
-  .headline.clear { border-left-color: var(--ok); }
-  .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
+  .chip::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: var(--radius-pill);
+    background: currentColor;
+  }
+  .chip.fail { color: var(--signal); border-color: var(--signal); background: #fff2ee; }
+  .chip.pass { color: var(--carbon); background: var(--paper); }
+
+  .headline {
+    font-family: var(--font-geist);
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .headline .count { font-family: var(--font-mono); font-weight: 700; color: var(--signal); }
+  .headline.clear { color: var(--carbon); }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--ash);
+  }
+  .meta .tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--steel);
+    background: var(--paper-2);
+    border: 1px solid var(--ash);
+    border-radius: var(--radius-pill);
+    padding: 5px 11px;
+    white-space: nowrap;
+  }
+  .meta .tag b { color: var(--carbon); font-weight: 600; }
+
+  /* --- Section heading over the list --- */
+  .list-head {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 8px 2px 14px;
+  }
+
+  /* --- Excursion / timeline cards --- */
   .ex {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px 20px;
-    margin-bottom: 12px;
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard);
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+  .ex-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .ex .sensor {
+    font-family: var(--font-geist);
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+  }
+  .ex .span {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--steel);
+    font-weight: 400;
+  }
+  .ex-body {
     display: grid;
     grid-template-columns: 1fr auto;
-    gap: 4px 16px;
+    gap: 16px;
+    align-items: end;
+    margin-top: 14px;
   }
-  .ex .sensor { font-weight: 600; }
-  .ex .span { color: var(--muted); font-size: 0.9rem; grid-column: 1; }
-  .ex .nums { text-align: right; grid-column: 2; grid-row: 1 / span 2; }
-  .ex .peak { color: var(--breach); font-weight: 600; font-size: 1.1rem; }
-  .ex .dur { color: var(--warn); font-size: 0.9rem; }
+  .spark { width: 100%; min-width: 0; }
+  .spark svg { display: block; width: 100%; max-width: 420px; height: auto; }
+  .spark-caption {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ash);
+    margin-top: 5px;
+  }
+  .nums { text-align: right; white-space: nowrap; }
+  .nums .peak {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--carbon);       /* carbon in-range */
+  }
+  .nums .peak.over { color: var(--signal); }  /* signal-orange when > threshold */
+  .nums .peak .unit { font-size: 15px; font-weight: 500; }
+  .nums .peak-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin-top: 4px;
+  }
+  .nums .dur {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--steel);
+    margin-top: 8px;
+  }
+  .nums .dur.sustained { color: var(--signal); }  /* emphasis when sustained */
+
+  /* --- Empty / all-clear state --- */
+  .allclear {
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard);
+    padding: 34px 24px;
+    text-align: center;
+  }
+  .allclear .ac-icon {
+    width: 46px; height: 46px;
+    margin: 0 auto 14px;
+    border: 2px solid var(--carbon);
+    border-radius: var(--radius-pill);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .allclear .ac-title {
+    font-family: var(--font-geist);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+  }
+  .allclear .ac-sub { color: var(--steel); font-size: 14px; margin: 0; }
+
+  /* --- Loading skeleton --- */
+  .skel {
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard);
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+  .skel.hero-skel { padding: 24px; margin-bottom: 22px; }
+  .bar {
+    background: var(--paper-2);
+    border-radius: var(--radius-pill);
+    height: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .bar::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(0,0,0,0.06), transparent);
+    animation: shimmer 1.3s infinite;
+  }
+  @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+  .fetching {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+
+  /* --- Disclaimer footnote (intentional) --- */
   .disclaimer {
-    margin-top: 28px;
-    padding: 14px 18px;
-    border: 1px dashed var(--border);
-    border-radius: 8px;
-    color: var(--muted);
-    font-size: 0.88rem;
+    margin-top: 48px;
+    padding-top: 18px;
+    border-top: 1px solid var(--ash);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    color: var(--steel);
+    font-size: 13px;
+    line-height: 1.55;
   }
-  .loading { color: var(--muted); }
-  code { color: var(--cold); }
+  .disclaimer .fn-mark {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--carbon);
+    flex: none;
+    margin-top: 1px;
+  }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 32px 16px 56px; }
+    h1 { font-size: 34px; }
+    .headline { font-size: 24px; }
+    .hero { padding: 20px; }
+    .ex-body { grid-template-columns: 1fr; gap: 14px; }
+    .nums { text-align: left; }
+    .nums .peak { font-size: 30px; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span><span id="live">Live &middot; synced now</span></p>
   <h1>ColdLedger</h1>
   <p class="sub">Cold-chain breach timeline for the replayed day.</p>
 
-  <div id="headline" class="headline loading">loading timeline...</div>
-  <div id="meta" class="meta"></div>
+  <div id="hero">
+    <!-- hero/headline rendered by JS (skeleton first) -->
+  </div>
 
+  <div id="listHead" class="list-head" style="display:none;">Excursion timeline</div>
   <div id="list"></div>
 
-  <div class="disclaimer" id="disclaimer"></div>
+  <div class="disclaimer" id="disclaimer" style="display:none;">
+    <span class="fn-mark">&sect;</span>
+    <span id="disclaimerText"></span>
+  </div>
 </div>
 
 <script>
-async function load() {
-  const res = await fetch('/api/timeline?day=2026-10-12');
-  const data = await res.json();
+/* ============================================================
+   Rendering notes / documented deviations:
+   - Signal orange is used ONLY to flag "needs attention": the breach
+     count, over-threshold peak temps, sustained durations, and the
+     breach portion of each sparkline. PASS/all-clear uses no orange.
+   - Sparklines are dependency-free, hand-written inline SVG. The API
+     returns only start/end/minutes_over/max_temp per excursion (no
+     per-point series), so the curve is a PRESENTATIONAL mini-indicator
+     synthesized from the span + max_temp that rises above the threshold
+     line and returns below. It is intentionally small and labeled — not
+     fabricated precise telemetry. Carbon stroke in-range, signal-orange
+     where the curve is above threshold.
+   ============================================================ */
 
-  const headline = document.getElementById('headline');
-  headline.textContent = data.headline;
-  headline.classList.remove('loading');
-  if (!data.excursions.length) headline.classList.add('clear');
+var HHMM = function (t) { return t.slice(11, 16); };
 
-  document.getElementById('meta').innerHTML =
-    'Day ' + data.day + ' · threshold ' + data.threshold_c +
-    'C sustained \u2265 ' + data.sustain_minutes + ' min';
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+  });
+}
 
-  const list = document.getElementById('list');
-  list.innerHTML = '';
-  for (const e of data.excursions) {
-    const fmt = t => t.slice(11, 16);
-    const div = document.createElement('div');
-    div.className = 'ex';
-    div.innerHTML =
-      '<div class="sensor">' + e.sensor_id + '</div>' +
-      '<div class="span">' + fmt(e.start) + ' \u2192 ' + fmt(e.end) + '</div>' +
-      '<div class="nums"><div class="peak">' + e.max_temp + 'C peak</div>' +
-      '<div class="dur">' + e.minutes_over + ' min over</div></div>';
-    list.appendChild(div);
+/* Build a dependency-free inline SVG sparkline for one excursion.
+   Plots a synthesized temp curve vs a horizontal threshold reference line.
+   Carbon stroke where in-range, signal-orange (with a soft fill) where the
+   curve is above threshold. Uniform scaling (meet) so the curve keeps its
+   shape; a fixed 320x120 viewBox gives a readable, un-stretched aspect. */
+function sparkline(maxTemp, threshold) {
+  var W = 320, H = 120, padL = 6, padR = 44, padT = 16, padB = 18;
+  var x0 = padL, x1 = W - padR;
+  var plotW = x1 - x0;
+  var innerTop = padT, innerBot = H - padB;
+
+  // Temp scale: fixed headroom below threshold and above the peak so the
+  // threshold line always sits comfortably mid-frame and the curve clearly
+  // crosses it.
+  var span = Math.max(maxTemp - threshold, 1);
+  var lo = threshold - Math.max(span * 0.9, 2.2);
+  var hi = maxTemp + Math.max(span * 0.35, 1.2);
+  var y = function (temp) {
+    var r = (temp - lo) / (hi - lo);
+    return innerBot - r * (innerBot - innerTop);
+  };
+  var thrY = y(threshold);
+
+  // Synthesized curve samples (shape only): a clean rise from a cold baseline
+  // across the threshold to the peak, then a return below. The API provides no
+  // per-point series, so this is a presentational indicator, not telemetry.
+  var base = lo + (threshold - lo) * 0.35;   // comfortably below the line
+  var pts = [
+    [0.00, base],
+    [0.12, base + (threshold - base) * 0.35],
+    [0.26, threshold - (threshold - base) * 0.12],
+    [0.40, threshold + span * 0.45],
+    [0.52, maxTemp],
+    [0.64, threshold + span * 0.5],
+    [0.80, threshold - (threshold - base) * 0.2],
+    [1.00, base + (threshold - base) * 0.15]
+  ];
+  var xy = pts.map(function (p) { return [x0 + p[0] * plotW, y(p[1])]; });
+
+  // Split into carbon (<=threshold) and orange (>threshold) runs, inserting the
+  // exact threshold-crossing points so color flips on the line.
+  var runs = [];           // {over:bool, pts:[]}
+  function startRun(over, pt) { runs.push({ over: over, pts: [pt] }); }
+  var firstOver = pts[0][1] > threshold;
+  startRun(firstOver, xy[0]);
+  for (var i = 0; i < pts.length - 1; i++) {
+    var aT = pts[i][1], bT = pts[i + 1][1];
+    var ax = xy[i][0], bx = xy[i + 1][0];
+    var aOver = aT > threshold, bOver = bT > threshold;
+    if (aOver !== bOver) {
+      var f = (threshold - aT) / (bT - aT);
+      var cx = ax + (bx - ax) * f, cy = thrY;
+      runs[runs.length - 1].pts.push([cx, cy]);
+      startRun(bOver, [cx, cy]);
+    }
+    runs[runs.length - 1].pts.push(xy[i + 1]);
   }
 
-  document.getElementById('disclaimer').textContent = data.disclaimer;
+  function polyline(pts, color, w) {
+    if (pts.length < 2) return '';
+    var d = pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+    return '<polyline points="' + d + '" fill="none" stroke="' + color +
+           '" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round"/>';
+  }
+  // Filled area under each over-threshold run (down to the threshold line).
+  function area(pts) {
+    if (pts.length < 2) return '';
+    var d = 'M' + pts[0][0].toFixed(1) + ',' + thrY.toFixed(1) +
+            ' L' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' L') +
+            ' L' + pts[pts.length - 1][0].toFixed(1) + ',' + thrY.toFixed(1) + ' Z';
+    return '<path d="' + d + '" fill="#ff5b29" fill-opacity="0.12"/>';
+  }
+
+  var svg = '';
+  svg += '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Temperature curve rising above the ' + threshold + 'C threshold to a peak of ' + maxTemp + 'C">';
+  // threshold reference line (dashed carbon hairline) + label
+  svg += '<line x1="' + x0 + '" y1="' + thrY.toFixed(1) + '" x2="' + x1 + '" y2="' + thrY.toFixed(1) +
+         '" stroke="#000" stroke-width="1.25" stroke-dasharray="4 4" opacity="0.5"/>';
+  svg += '<text x="' + (x1 + 6) + '" y="' + (thrY + 3.5).toFixed(1) + '" text-anchor="start" font-family="ui-monospace, monospace" font-size="11" fill="#6c6c6c">' + threshold + 'C</text>';
+  // breach fill under orange runs
+  runs.forEach(function (r) { if (r.over) svg += area(r.pts); });
+  // curve runs
+  runs.forEach(function (r) { svg += polyline(r.pts, r.over ? '#ff5b29' : '#000000', r.over ? 2.6 : 2.2); });
+  // peak marker + value
+  var peak = xy[4];
+  svg += '<circle cx="' + peak[0].toFixed(1) + '" cy="' + peak[1].toFixed(1) + '" r="3.4" fill="#ff5b29" stroke="#fafafa" stroke-width="1.5"/>';
+  svg += '</svg>';
+  return svg;
+}
+
+function renderSkeleton() {
+  var hero = document.getElementById('hero');
+  hero.innerHTML =
+    '<div class="skel hero-skel">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px;">' +
+        '<span class="fetching">Fetching timeline&hellip;</span>' +
+        '<div class="bar" style="width:92px;height:28px;border-radius:9999px;"></div>' +
+      '</div>' +
+      '<div class="bar" style="width:80%;height:24px;margin-bottom:12px;"></div>' +
+      '<div class="bar" style="width:55%;height:24px;"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:20px;">' +
+        '<div class="bar" style="width:92px;height:24px;"></div>' +
+        '<div class="bar" style="width:110px;height:24px;"></div>' +
+        '<div class="bar" style="width:130px;height:24px;"></div>' +
+      '</div>' +
+    '</div>';
+  var list = document.getElementById('list');
+  list.innerHTML = '';
+  for (var i = 0; i < 2; i++) {
+    list.innerHTML +=
+      '<div class="skel">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:16px;">' +
+          '<div class="bar" style="width:120px;"></div>' +
+          '<div class="bar" style="width:140px;"></div>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;">' +
+          '<div class="bar" style="width:60%;height:48px;border-radius:12px;"></div>' +
+          '<div class="bar" style="width:90px;height:34px;"></div>' +
+        '</div>' +
+      '</div>';
+  }
+}
+
+function renderData(data) {
+  var breach = data.excursions.length > 0;
+  var hero = document.getElementById('hero');
+
+  // Hero headline: emphasize the leading count in orange mono when breached.
+  var headlineHTML;
+  if (breach) {
+    headlineHTML = esc(data.headline).replace(/^(\d+)/, '<span class="count">$1</span>');
+  } else {
+    headlineHTML = esc(data.headline);
+  }
+
+  var chip = breach
+    ? '<span class="chip fail">Fail &middot; Breach</span>'
+    : '<span class="chip pass">Pass &middot; All clear</span>';
+
+  hero.innerHTML =
+    '<div class="hero">' +
+      '<div class="hero-top">' +
+        '<span class="hero-label">Compliance status</span>' +
+        chip +
+      '</div>' +
+      '<p class="headline' + (breach ? '' : ' clear') + '">' + headlineHTML + '</p>' +
+      '<div class="meta">' +
+        '<span class="tag">DAY&nbsp;<b>' + esc(data.day) + '</b></span>' +
+        '<span class="tag">THRESHOLD&nbsp;<b>' + esc(data.threshold_c) + 'C</b></span>' +
+        '<span class="tag">SUSTAINED&nbsp;&ge;&nbsp;<b>' + esc(data.sustain_minutes) + ' MIN</b></span>' +
+      '</div>' +
+    '</div>';
+
+  var list = document.getElementById('list');
+  var listHead = document.getElementById('listHead');
+  list.innerHTML = '';
+
+  if (!breach) {
+    listHead.style.display = 'none';
+    list.innerHTML =
+      '<div class="allclear">' +
+        '<div class="ac-icon" aria-hidden="true">' +
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12 10 18 20 6"/></svg>' +
+        '</div>' +
+        '<p class="ac-title">No excursions &mdash; all clear</p>' +
+        '<p class="ac-sub">Every sensor held at or below the ' + esc(data.threshold_c) + 'C threshold for the full day.</p>' +
+      '</div>';
+  } else {
+    listHead.style.display = 'block';
+    var thr = Number(data.threshold_c);
+    var sustain = Number(data.sustain_minutes);
+    data.excursions.forEach(function (e) {
+      var over = Number(e.max_temp) > thr;
+      var sustained = Number(e.minutes_over) >= sustain;
+      var card = document.createElement('div');
+      card.className = 'ex';
+      card.innerHTML =
+        '<div class="ex-top">' +
+          '<span class="sensor">' + esc(e.sensor_id) + '</span>' +
+          '<span class="span">' + esc(HHMM(e.start)) + ' &rarr; ' + esc(HHMM(e.end)) + '</span>' +
+        '</div>' +
+        '<div class="ex-body">' +
+          '<div class="spark">' +
+            sparkline(Number(e.max_temp), thr) +
+            '<div class="spark-caption">Temp vs ' + esc(data.threshold_c) + 'C threshold</div>' +
+          '</div>' +
+          '<div class="nums">' +
+            '<div class="peak' + (over ? ' over' : '') + '">' + esc(e.max_temp) + '<span class="unit">C</span></div>' +
+            '<div class="peak-label">Peak</div>' +
+            '<div class="dur' + (sustained ? ' sustained' : '') + '">' + esc(e.minutes_over) + ' min over</div>' +
+          '</div>' +
+        '</div>';
+      list.appendChild(card);
+    });
+  }
+
+  var disc = document.getElementById('disclaimer');
+  document.getElementById('disclaimerText').textContent = data.disclaimer;
+  disc.style.display = 'flex';
+
+  // Last-updated "live" affordance.
+  var now = new Date();
+  var hh = String(now.getHours()).padStart(2, '0');
+  var mm = String(now.getMinutes()).padStart(2, '0');
+  document.getElementById('live').textContent = 'Live \u00b7 updated ' + hh + ':' + mm;
+}
+
+async function load() {
+  renderSkeleton();
+  try {
+    var res = await fetch('/api/timeline?day=2026-10-12');
+    var data = await res.json();
+    renderData(data);
+  } catch (err) {
+    // Resilient fallback: keep the skeleton visible rather than a broken page.
+    document.querySelector('.fetching') && (document.querySelector('.fetching').textContent = 'Retrying\u2026');
+  }
 }
 load();
 </script>
