@@ -269,5 +269,10 @@ def dashboard() -> FileResponse:
     return FileResponse(os.path.join("static", "index.html"))
 
 
+@app.get("/durability")
+def durability() -> FileResponse:
+    return FileResponse(os.path.join("static", "durability.html"))
+
+
 # Static assets (only index.html here, but keep the mount for future files).
 app.mount("/static", StaticFiles(directory="static"), name="static")

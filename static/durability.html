@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baridi durability proof</title>
+<style>
+  /* ============================================================
+     Baridi durability page. Same Timescale blueprint system as
+     home.html and index.html. Warm paper, carbon structure, one
+     signal-orange for emphasis only. Tokens, fonts, and nav are
+     copied verbatim so the three pages stay identical.
+     ============================================================ */
+
+  /* Self-hosted fonts (served by FastAPI /static mount) */
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-SemiBold.woff2') format('woff2');
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Medium.woff2') format('woff2');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-SemiBold.woff2') format('woff2');
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+
+  :root {
+    /* Colors: achromatic structure plus one emphasis color */
+    --paper:    #fafafa;   /* canvas and card surfaces, never pure white */
+    --carbon:   #000000;   /* all structure: text, borders, shadows, fills */
+    --graphite: #242424;   /* darker surface variant (footnote) */
+    --steel:    #6c6c6c;   /* secondary text, subdued labels */
+    --ash:      #b3b3b3;   /* tertiary text, placeholders, light dividers */
+    --paper-2:  #f0f0ee;   /* subtle inset / skeleton base */
+    /* Signal orange is EMPHASIS ONLY (never a button fill, never body text):
+       here it marks the breach and the kill moment only. */
+    --signal:   #ff5b29;
+
+    --font-geist: 'Geist', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono:  'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --radius-card: 12px;
+    --radius-pill: 9999px;
+    --radius-btn:  4px;
+    --shadow-hard: 5px 5px 0px #000;   /* signature hard offset, no blur */
+    --border-hair: 1px solid var(--carbon);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { background: var(--paper); }
+
+  body {
+    margin: 0;
+    font-family: var(--font-geist);
+    color: var(--carbon);
+    line-height: 1.5;
+    /* Graph-paper blueprint motif: warm paper plus a faint carbon dot grid. */
+    background-color: var(--paper);
+    background-image: radial-gradient(rgba(0,0,0,0.055) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: -10px -10px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Shared header / nav (identical on all three pages) */
+  .topnav {
+    max-width: 880px; margin: 0 auto; padding: 20px 20px 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .topnav .brand {
+    font-family: var(--font-geist); font-weight: 700; font-size: 18px;
+    letter-spacing: -0.02em; color: var(--carbon); text-decoration: none;
+  }
+  .topnav .navlinks { display: flex; gap: 8px; }
+  .topnav .navlinks a {
+    font-family: var(--font-mono); font-weight: 500; font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--steel);
+    text-decoration: none; padding: 7px 14px;
+    border: 1px solid var(--ash); border-radius: var(--radius-pill);
+  }
+  .topnav .navlinks a:hover { color: var(--carbon); border-color: var(--carbon); }
+  .topnav .navlinks a.active { color: var(--carbon); border-color: var(--carbon); }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 72px; }
+
+  /* Eyebrow label */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .rec-dot {
+    width: 8px; height: 8px; border-radius: var(--radius-pill);
+    background: var(--carbon);
+    display: inline-block;
+    flex: none;
+  }
+
+  h1 {
+    font-family: var(--font-geist);
+    font-weight: 700;
+    font-size: 44px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 0 0 8px;
+  }
+  .sub { color: var(--steel); margin: 0 0 28px; font-size: 16px; max-width: 54ch; }
+
+  /* Status chip (pill), same language as the dashboard chips. */
+  .chip {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border-radius: var(--radius-pill);
+    border: var(--border-hair);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .chip::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: var(--radius-pill);
+    background: currentColor;
+  }
+  .chip.pass { color: var(--carbon); background: var(--paper); }
+
+  /* Card surface: carbon hairline, hard offset shadow, 12px radius. */
+  .card {
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard);
+    padding: 24px 24px 22px;
+    margin-bottom: 22px;
+  }
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .card-label {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+
+  .lead {
+    font-family: var(--font-geist);
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+  }
+  .card p { margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  .note { color: var(--steel); font-size: 15px; line-height: 1.6; }
+
+  /* Recorded banner: a quiet paper-2 inset that states plainly this is a
+     captured run, not a live action. No orange here. */
+  .recorded {
+    background: var(--paper-2);
+    border: var(--border-hair);
+    border-radius: var(--radius-btn);
+    padding: 14px 16px;
+    margin: 0 0 22px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .recorded .mark {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--carbon);
+    border: var(--border-hair);
+    border-radius: var(--radius-pill);
+    padding: 4px 10px;
+    flex: none;
+    white-space: nowrap;
+  }
+  .recorded .txt { color: var(--graphite); font-size: 14px; line-height: 1.55; }
+
+  /* Timeline table of the recorded kill-and-resume run. */
+  .tl-wrap { overflow-x: auto; }
+  table.timeline {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  table.timeline th {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--steel);
+    text-align: left;
+    padding: 0 14px 10px 0;
+    border-bottom: var(--border-hair);
+    white-space: nowrap;
+  }
+  table.timeline td {
+    padding: 12px 14px 12px 0;
+    border-bottom: 1px solid var(--ash);
+    vertical-align: top;
+  }
+  table.timeline tr:last-child td { border-bottom: none; }
+  table.timeline td.t {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--carbon);
+    white-space: nowrap;
+  }
+  table.timeline td.ev { color: var(--graphite); line-height: 1.5; }
+  /* Signal-orange emphasis is reserved for the breach and the kill rows. */
+  table.timeline tr.mark td.t,
+  table.timeline tr.mark td.ev { color: var(--signal); }
+  table.timeline tr.mark td.t b { color: var(--signal); }
+  .tag {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--steel);
+    border: 1px solid var(--ash);
+    border-radius: var(--radius-pill);
+    padding: 2px 8px;
+    margin-left: 8px;
+    white-space: nowrap;
+  }
+  table.timeline tr.mark .tag { color: var(--signal); border-color: var(--signal); }
+
+  /* Result line: the plain outcome, with the counts in carbon. */
+  .result {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--graphite);
+    line-height: 1.6;
+    margin: 0;
+  }
+  .result b { color: var(--carbon); font-weight: 700; }
+
+  /* Final alert keys, shown as mono rows so the two excursion keys read as
+     the literal log content they are. */
+  .keys {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+  }
+  .keys li {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--carbon);
+    background: var(--paper-2);
+    border: 1px solid var(--ash);
+    border-radius: var(--radius-btn);
+    padding: 10px 12px;
+    overflow-wrap: anywhere;
+  }
+  .keys .meta { color: var(--steel); }
+
+  .disclaimer {
+    margin-top: 48px;
+    padding-top: 18px;
+    border-top: 1px solid var(--ash);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    color: var(--steel);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .disclaimer .fn-mark {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--carbon);
+    flex: none;
+    margin-top: 1px;
+  }
+  .brandfoot {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ash);
+    margin: 14px 0 0;
+  }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 32px 16px 56px; }
+    h1 { font-size: 34px; }
+    .lead { font-size: 22px; }
+    .card { padding: 20px; }
+    table.timeline th, table.timeline td { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<header class="topnav">
+  <a class="brand" href="/">Baridi</a>
+  <nav class="navlinks">
+    <a href="/">Home</a>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/durability" class="active">Durability</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <p class="eyebrow"><span class="rec-dot" aria-hidden="true"></span><span>Recorded durability test</span></p>
+  <h1>The alert survives a crash</h1>
+  <p class="sub">Baridi drives its breach alert with Temporal. To check that the alert is not lost when a process dies, we killed a worker in the middle of sending an alert and watched Temporal resume the work on a new worker. This page shows that captured run.</p>
+
+  <div class="recorded">
+    <span class="mark">Recorded, not live</span>
+    <span class="txt">This is a captured run from the build instance, kept here as a record. It is not a live action and nothing on this page starts a worker. No live Temporal server runs on the web path, and port 7233 stays off in production.</span>
+  </div>
+
+  <!-- Kill-and-resume timeline -->
+  <div class="card">
+    <div class="card-top">
+      <span class="card-label">Kill and resume, fridge-01 2026-10-12</span>
+      <span class="chip pass">Late, not lost</span>
+    </div>
+    <p class="lead">A worker dies mid-alert and the alert still fires once</p>
+    <p class="note">Worker A ran with a 25 second delay inside the alert step, so it could be killed after the breach was known but before the alert was durably written. The breach count was already decided. Only the write had not happened yet.</p>
+
+    <div class="tl-wrap">
+      <table class="timeline">
+        <thead>
+          <tr><th scope="col">Time (UTC)</th><th scope="col">Event</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="t">21:01:20.590</td>
+            <td class="ev">Worker A started with a 25 second alert delay.</td>
+          </tr>
+          <tr>
+            <td class="t">21:01:24.595</td>
+            <td class="ev">Workflow submitted.</td>
+          </tr>
+          <tr class="mark">
+            <td class="t">21:01:25.301 <b>&bull;</b></td>
+            <td class="ev">Worker A: alert START for excursion 10:04. The breach is known, the alert is not yet written.<span class="tag">Breach</span></td>
+          </tr>
+          <tr class="mark">
+            <td class="t">21:01:25.614 <b>&bull;</b></td>
+            <td class="ev">Worker A KILLED with kill -9, mid-alert. No worker is running.<span class="tag">Kill</span></td>
+          </tr>
+          <tr>
+            <td class="t">21:01:25.617</td>
+            <td class="ev">alerts.log line count while down: 0. The alert was not written before the crash.</td>
+          </tr>
+          <tr>
+            <td class="t">21:01:30.623</td>
+            <td class="ev">Worker B restarted, no delay.</td>
+          </tr>
+          <tr>
+            <td class="t">21:01:56.316</td>
+            <td class="ev">Temporal redelivers the activity. The alert fires, about 31 seconds late.</td>
+          </tr>
+          <tr>
+            <td class="t">21:01:56.544</td>
+            <td class="ev">Final alert count: 2, one per excursion. None lost, none doubled.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="card">
+    <div class="card-top">
+      <span class="card-label">Result</span>
+    </div>
+    <p class="result">final alert count: <b>2</b>, <b>none lost</b>, <b>none doubled</b>, about <b>31 seconds</b> late.</p>
+    <p class="note" style="margin-top:12px;">The alert fired late because Temporal retried after the worker died. It was not lost, and it did not double-fire. The two keys below are the final lines in the alert log, one for each excursion on the featured day.</p>
+    <ul class="keys">
+      <li>fridge-01:2026-10-12:2026-10-12T10:04:00+00:00 <span class="meta">minutes_over 32, max_temp 9.404</span></li>
+      <li>fridge-01:2026-10-12:2026-10-12T17:04:00+00:00 <span class="meta">minutes_over 11, max_temp 7.11</span></li>
+    </ul>
+  </div>
+
+  <!-- How this maps to the product -->
+  <div class="card">
+    <div class="card-top">
+      <span class="card-label">Why this matters</span>
+    </div>
+    <p class="note">The durability mechanism is Temporal. It checkpoints the workflow, so a crash resumes from the last step instead of dropping the alert. That is the same thing the home page calls an alert that survives a crash, shown here as a recorded kill-and-resume rather than words. On the live site the breach timeline is served by the read-only API and TimescaleDB. The worker in this test is a separate process and does not run on the web path.</p>
+  </div>
+
+  <div class="disclaimer">
+    <span class="fn-mark">&sect;</span>
+    <span>Recorded durability run from the build instance, not a live action. Numbers are the real values captured during the kill-and-resume test. Baridi is a logging and alert aid, not a certified compliance record.</span>
+  </div>
+  <p class="brandfoot">Baridi Technologies</p>
+</div>
+</body>
+</html>
