@@ -144,6 +144,103 @@
   }
   .sub { color: var(--steel); margin: 0 0 32px; font-size: 16px; max-width: 46ch; }
 
+  /* --- Browse controls (sensor + day picker) ---
+     Built only from existing tokens: carbon hairline borders, hard offset
+     shadow, 12px card radius, 9999px pills, mono uppercase labels. No new
+     colors. Signal-orange appears here ONLY as the FAIL-day status marker
+     (emphasis), never as a control fill. */
+  .controls {
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard);
+    padding: 18px 20px;
+    margin-bottom: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px 24px;
+    align-items: flex-end;
+  }
+  .ctl { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .ctl-label {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+  }
+  .ctl-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  /* Styled native controls keep carbon structure; paper fill, no orange. */
+  .field {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--carbon);
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-btn);
+    padding: 9px 12px;
+    line-height: 1.2;
+    min-height: 40px;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  select.field {
+    padding-right: 30px;
+    /* carbon chevron drawn as an inline SVG data-uri (no new color token) */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpolyline points='1 1 6 6 11 1' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+  }
+  .field:focus-visible,
+  .pill-btn:focus-visible {
+    outline: 2px solid var(--carbon);
+    outline-offset: 2px;
+  }
+  input[type="date"].field { min-width: 168px; }
+  /* Prev/next day steppers: mono uppercase pills, ash border, carbon on hover
+     (same affordance language as the nav links). */
+  .pill-btn {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--carbon);
+    background: var(--paper);
+    border: 1px solid var(--ash);
+    border-radius: var(--radius-pill);
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0 12px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .pill-btn:hover:not(:disabled) { border-color: var(--carbon); }
+  .pill-btn:disabled { color: var(--ash); cursor: not-allowed; }
+  /* Day status readout: PASS is quiet carbon text; FAIL shows the one
+     signal-orange dot as attention emphasis (not a fill). */
+  .day-status {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--steel);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 18px;
+  }
+  .day-status .dot {
+    width: 8px; height: 8px; border-radius: var(--radius-pill);
+    background: var(--carbon);
+    display: inline-block;
+    flex: none;
+  }
+  .day-status.fail { color: var(--signal); }
+  .day-status.fail .dot { background: var(--signal); }
+
   /* --- Hero headline card --- */
   .hero {
     background: var(--paper);
@@ -369,6 +466,23 @@
     color: var(--steel);
   }
 
+  /* --- Scale-stat meta line (real numbers from /api/scale) ---
+     Quiet, in-system mono/steel text. Not shouty, no orange. */
+  .scalebar {
+    margin-top: 26px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--steel);
+    line-height: 1.6;
+  }
+  .scalebar b { color: var(--carbon); font-weight: 600; }
+
   /* --- Disclaimer footnote (intentional) --- */
   .disclaimer {
     margin-top: 48px;
@@ -398,6 +512,8 @@
     .ex-body { grid-template-columns: 1fr; gap: 14px; }
     .nums { text-align: left; }
     .nums .peak { font-size: 30px; }
+    .controls { gap: 16px; }
+    input[type="date"].field { min-width: 0; width: 100%; }
   }
 </style>
 </head>
@@ -412,7 +528,33 @@
 <div class="wrap">
   <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span><span id="live">Live &middot; synced now</span></p>
   <h1>Baridi</h1>
-  <p class="sub">Cold-chain breach timeline for the replayed day.</p>
+  <p class="sub">Cold-chain breach timeline. Pick a sensor and a day to browse the replayed history.</p>
+
+  <!-- Browse controls: sensor selector + day picker. Populated from the API
+       on load; defaults to the featured fridge-01 / 2026-10-12 breach view. -->
+  <div class="controls" role="group" aria-label="Browse sensors and days">
+    <div class="ctl">
+      <label class="ctl-label" for="sensorSelect">Sensor</label>
+      <select class="field" id="sensorSelect" aria-label="Select a sensor">
+        <option value="fridge-01">fridge-01</option>
+      </select>
+    </div>
+    <div class="ctl">
+      <label class="ctl-label" for="daySelect">Day</label>
+      <div class="ctl-row">
+        <button type="button" class="pill-btn" id="dayPrev" aria-label="Previous day">&larr;</button>
+        <input class="field" type="date" id="daySelect" value="2026-10-12"
+               min="2026-09-13" max="2026-10-12" aria-label="Select a day">
+        <button type="button" class="pill-btn" id="dayNext" aria-label="Next day">&rarr;</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span class="ctl-label" id="dayStatusLabel">Day status</span>
+      <span class="day-status" id="dayStatus" aria-live="polite" role="status">
+        <span class="dot" aria-hidden="true"></span><span id="dayStatusText">&mdash;</span>
+      </span>
+    </div>
+  </div>
 
   <div id="hero">
     <!-- hero/headline rendered by JS (skeleton first) -->
@@ -420,6 +562,9 @@
 
   <div id="listHead" class="list-head" style="display:none;">Excursion timeline</div>
   <div id="list"></div>
+
+  <!-- Real scale-stat meta line (live numbers from /api/scale) -->
+  <p class="scalebar" id="scalebar" style="display:none;"></p>
 
   <div class="disclaimer" id="disclaimer" style="display:none;">
     <span class="fn-mark">&sect;</span>
@@ -431,8 +576,9 @@
 /* ============================================================
    Rendering notes / documented deviations:
    - Signal orange is used ONLY to flag "needs attention": the breach
-     count, over-threshold peak temps, sustained durations, and the
-     breach portion of each sparkline. PASS/all-clear uses no orange.
+     count, over-threshold peak temps, sustained durations, the breach
+     portion of each sparkline, and the FAIL-day marker in the day-status
+     readout. PASS/all-clear uses no orange.
    - Sparklines are dependency-free, hand-written inline SVG. The API
      returns only start/end/minutes_over/max_temp per excursion (no
      per-point series), so the curve is a PRESENTATIONAL mini-indicator
@@ -440,9 +586,23 @@
      line and returns below. It is intentionally small and labeled — not
      fabricated precise telemetry. Carbon stroke in-range, signal-orange
      where the curve is above threshold.
+   - Browse controls default to the featured fridge-01 / 2026-10-12 breach
+     view so the known view loads first; the hero + list still render via
+     the same renderData()/sparkline() path as before.
    ============================================================ */
 
 var HHMM = function (t) { return t.slice(11, 16); };
+
+/* Default featured state (loads first, unchanged from before). */
+var DEFAULT_SENSOR = 'fridge-01';
+var DEFAULT_DAY = '2026-10-12';
+
+/* Current browse state. */
+var state = { sensor: DEFAULT_SENSOR, day: DEFAULT_DAY };
+/* Day metadata: map of 'YYYY-MM-DD' -> status 'PASS'|'FAIL' for the current
+   sensor, plus the sorted list of available days for prev/next stepping. */
+var dayInfo = { days: [], status: {} };
+var inFlight = false;
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, function (c) {
@@ -657,18 +817,183 @@ function renderData(data) {
   document.getElementById('live').textContent = 'Live \u00b7 updated ' + hh + ':' + mm;
 }
 
-async function load() {
+/* Render the small day-status readout next to the day picker from dayInfo. */
+function renderDayStatus() {
+  var el = document.getElementById('dayStatus');
+  var txt = document.getElementById('dayStatusText');
+  var status = dayInfo.status[state.day];
+  if (status === 'FAIL') {
+    el.className = 'day-status fail';
+    txt.textContent = 'Fail \u00b7 breach';
+  } else if (status === 'PASS') {
+    el.className = 'day-status';
+    txt.textContent = 'Pass \u00b7 all clear';
+  } else {
+    el.className = 'day-status';
+    txt.textContent = '\u2014';
+  }
+}
+
+/* Enable/disable prev/next steppers at the ends of the available range. */
+function updateDaySteppers() {
+  var prev = document.getElementById('dayPrev');
+  var next = document.getElementById('dayNext');
+  var days = dayInfo.days;
+  var idx = days.indexOf(state.day);
+  prev.disabled = (days.length === 0 || idx <= 0);
+  next.disabled = (days.length === 0 || idx === -1 || idx >= days.length - 1);
+}
+
+/* Populate the sensor <select> from /api/sensors (demo sensors only). Keeps
+   the current/default selection. Non-fatal on error (keeps the default). */
+async function loadSensors() {
+  try {
+    var res = await fetch('/api/sensors');
+    if (!res.ok) return;
+    var data = await res.json();
+    var demo = (data.demo_sensors && data.demo_sensors.length)
+      ? data.demo_sensors
+      : (data.sensors || []).filter(function (s) { return s.demo; }).map(function (s) { return s.sensor_id; });
+    if (!demo.length) return;
+    // Put the default sensor first so it is the initial selection.
+    demo.sort();
+    var sel = document.getElementById('sensorSelect');
+    sel.innerHTML = '';
+    demo.forEach(function (id) {
+      var opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = id;
+      if (id === state.sensor) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (err) { /* keep the default single option */ }
+}
+
+/* Load the day list + PASS/FAIL annotations for the current sensor from
+   /api/days. Sets the date input min/max and the day-status readout. */
+async function loadDays() {
+  try {
+    var res = await fetch('/api/days?sensor_id=' + encodeURIComponent(state.sensor));
+    if (!res.ok) return;
+    var data = await res.json();
+    var days = (data.days || []).map(function (d) { return d.day; });
+    var status = {};
+    (data.days || []).forEach(function (d) { status[d.day] = d.status; });
+    dayInfo.days = days;
+    dayInfo.status = status;
+    if (days.length) {
+      var input = document.getElementById('daySelect');
+      input.min = days[0];
+      input.max = days[days.length - 1];
+      // If the current day is not in this sensor's range, clamp to the last
+      // available day (keeps a valid selection when switching sensors).
+      if (days.indexOf(state.day) === -1) {
+        state.day = days[days.length - 1];
+        input.value = state.day;
+      }
+    }
+  } catch (err) { /* leave dayInfo empty; steppers stay disabled */ }
+  renderDayStatus();
+  updateDaySteppers();
+}
+
+/* Render the real scale-stat meta line from /api/scale. Live numbers only,
+   quiet styling, no hype. Non-fatal on error (line stays hidden). */
+async function loadScale() {
+  try {
+    var res = await fetch('/api/scale');
+    if (!res.ok) return;
+    var d = await res.json();
+    var readings = Number(d.total_readings).toLocaleString('en-US');
+    var sensors = Number(d.sensor_count);
+    var first = String(d.first_ts).slice(0, 10);
+    var last = String(d.last_ts).slice(0, 10);
+    var ms = Number(d.featured_query_ms);
+    var el = document.getElementById('scalebar');
+    el.innerHTML =
+      '<span><b>' + esc(readings) + '</b> readings</span>' +
+      '<span>across <b>' + esc(sensors) + '</b> sensors</span>' +
+      '<span>from <b>' + esc(first) + '</b> to <b>' + esc(last) + '</b>.</span>' +
+      '<span>Featured-day excursion query ran in <b>' + esc(ms.toFixed(1)) + ' ms</b> on this request.</span>';
+    el.style.display = 'flex';
+  } catch (err) { /* leave the scale line hidden */ }
+}
+
+/* Fetch + render the timeline for the current sensor/day. Shows the skeleton
+   while loading; keeps the resilient fallback on error. */
+async function loadTimeline() {
+  if (inFlight) return;
+  inFlight = true;
   renderSkeleton();
   try {
-    var res = await fetch('/api/timeline?day=2026-10-12');
+    var url = '/api/timeline?day=' + encodeURIComponent(state.day) +
+              '&sensor_id=' + encodeURIComponent(state.sensor);
+    var res = await fetch(url);
     var data = await res.json();
     renderData(data);
   } catch (err) {
     // Resilient fallback: keep the skeleton visible rather than a broken page.
-    document.querySelector('.fetching') && (document.querySelector('.fetching').textContent = 'Retrying\u2026');
+    var f = document.querySelector('.fetching');
+    if (f) f.textContent = 'Retrying\u2026';
+  } finally {
+    inFlight = false;
   }
 }
-load();
+
+/* Wire the controls. Changing the sensor reloads that sensor's days then the
+   timeline; changing/stepping the day reloads the timeline. */
+function wireControls() {
+  var sel = document.getElementById('sensorSelect');
+  var input = document.getElementById('daySelect');
+  var prev = document.getElementById('dayPrev');
+  var next = document.getElementById('dayNext');
+
+  sel.addEventListener('change', async function () {
+    state.sensor = sel.value;
+    await loadDays();           // refresh day range + PASS/FAIL for this sensor
+    input.value = state.day;
+    await loadTimeline();
+  });
+
+  input.addEventListener('change', async function () {
+    var v = input.value;        // YYYY-MM-DD from the native date input
+    if (!v) { input.value = state.day; return; }
+    state.day = v;
+    renderDayStatus();
+    updateDaySteppers();
+    await loadTimeline();
+  });
+
+  function step(delta) {
+    var days = dayInfo.days;
+    var idx = days.indexOf(state.day);
+    if (idx === -1) return;
+    var ni = idx + delta;
+    if (ni < 0 || ni >= days.length) return;
+    state.day = days[ni];
+    input.value = state.day;
+    renderDayStatus();
+    updateDaySteppers();
+    loadTimeline();
+  }
+  prev.addEventListener('click', function () { step(-1); });
+  next.addEventListener('click', function () { step(1); });
+}
+
+async function init() {
+  // Reflect the default featured state in the controls up front.
+  document.getElementById('sensorSelect').value = state.sensor;
+  document.getElementById('daySelect').value = state.day;
+  wireControls();
+  // Render the featured timeline first (the known view), then hydrate the
+  // controls and the scale line. Staggered to stay under the shared per-IP
+  // rate budget and to show the featured view as fast as possible.
+  await loadTimeline();
+  await loadSensors();
+  await loadDays();
+  await loadScale();
+}
+init();
 </script>
 </body>
 </html>
