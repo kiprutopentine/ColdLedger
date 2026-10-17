@@ -13,3 +13,6 @@ PROGRESS.md
 BUILD_README.md
 review*.md
 review*.json
+
+# agent task files — never commit/push
+.agents/
