@@ -28,6 +28,12 @@ DEFAULT_DSN = os.environ.get(
 THRESHOLD_C = float(os.environ.get("BREACH_THRESHOLD_C", "5.0"))
 SUSTAIN_MIN = int(os.environ.get("BREACH_SUSTAIN_MINUTES", "10"))
 
+# The three honest demo sensors. Everything else in the readings table (the
+# bench-* sensors) is scale-only ballast loaded for the continuous-aggregate
+# benchmark, not part of the demo story. The API separates the two so the UI
+# can default to just these.
+DEMO_SENSORS = ("fridge-01", "display-case-01", "walk-in-01")
+
 
 @dataclass
 class Excursion:
@@ -107,6 +113,146 @@ def is_hypertable(conn: psycopg.Connection, name: str = "readings") -> bool:
         return cur.fetchone()[0] == 1
 
 
+def sensor_summary(conn: psycopg.Connection) -> list[dict]:
+    """Per-sensor reading count and timestamp range, ordered by sensor_id.
+    Each row is flagged `demo` so the API/UI can separate the three demo
+    sensors from the bench-* scale ballast. One grouped scan of readings."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT sensor_id, count(*), min(ts), max(ts) "
+            "FROM readings GROUP BY sensor_id ORDER BY sensor_id"
+        )
+        rows = cur.fetchall()
+    out: list[dict] = []
+    for sid, cnt, min_ts, max_ts in rows:
+        out.append(
+            {
+                "sensor_id": sid,
+                "count": int(cnt),
+                "first_ts": min_ts.isoformat() if min_ts else None,
+                "last_ts": max_ts.isoformat() if max_ts else None,
+                "demo": sid in DEMO_SENSORS,
+            }
+        )
+    return out
+
+
+def distinct_sensor_count(conn: psycopg.Connection) -> int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(DISTINCT sensor_id) FROM readings")
+        return int(cur.fetchone()[0])
+
+
+def date_range(conn: psycopg.Connection) -> tuple[str | None, str | None]:
+    """Overall min/max reading timestamp across the whole table, ISO8601."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT min(ts), max(ts) FROM readings")
+        min_ts, max_ts = cur.fetchone()
+    return (
+        min_ts.isoformat() if min_ts else None,
+        max_ts.isoformat() if max_ts else None,
+    )
+
+
+def sensor_ids_in_db(conn: psycopg.Connection) -> list[str]:
+    """All distinct sensor_ids actually present in readings, sorted."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT DISTINCT sensor_id FROM readings ORDER BY sensor_id")
+        return [r[0] for r in cur.fetchall()]
+
+
+def available_days(
+    conn: psycopg.Connection, sensor_id: str | None = None
+) -> list[dict]:
+    """List calendar days (UTC) that have readings, annotated with whether that
+    day carried any sustained breach. When sensor_id is given, restrict to that
+    sensor; otherwise cover the three demo sensors only (bench-* ballast is not
+    part of the explorable demo surface).
+
+    Breach presence is computed over the continuous aggregate with the same
+    gaps-and-islands logic as excursions(): a day is FAIL if any sensor in scope
+    has an island of at least SUSTAIN_MIN over-threshold minutes on that day.
+    sensor_id is parameterized, never interpolated."""
+    params: dict = {"threshold": THRESHOLD_C, "sustain": SUSTAIN_MIN}
+    if sensor_id is not None:
+        sensor_filter = "AND sensor_id = %(sensor_id)s"
+        params["sensor_id"] = sensor_id
+    else:
+        sensor_filter = "AND sensor_id = ANY(%(demo)s)"
+        params["demo"] = list(DEMO_SENSORS)
+
+    sql = f"""
+    WITH buckets AS (
+        SELECT
+            sensor_id,
+            bucket,
+            (bucket AT TIME ZONE 'UTC')::date AS day,
+            (max_temp > %(threshold)s) AS over
+        FROM readings_1min
+        WHERE TRUE {sensor_filter}
+    ),
+    edges AS (
+        SELECT
+            sensor_id,
+            day,
+            bucket,
+            over,
+            CASE WHEN over <> COALESCE(
+                    LAG(over) OVER (PARTITION BY sensor_id ORDER BY bucket),
+                    FALSE)
+                 THEN 1 ELSE 0 END AS is_edge
+        FROM buckets
+    ),
+    grouped AS (
+        SELECT
+            sensor_id,
+            day,
+            over,
+            SUM(is_edge) OVER (PARTITION BY sensor_id ORDER BY bucket) AS grp
+        FROM edges
+    ),
+    islands AS (
+        SELECT
+            sensor_id,
+            day,
+            grp,
+            count(*) AS minutes_over
+        FROM grouped
+        WHERE over
+        GROUP BY sensor_id, day, grp
+    ),
+    day_breach AS (
+        SELECT day, bool_or(minutes_over >= %(sustain)s) AS breached
+        FROM islands
+        GROUP BY day
+    ),
+    all_days AS (
+        SELECT DISTINCT (bucket AT TIME ZONE 'UTC')::date AS day
+        FROM readings_1min
+        WHERE TRUE {sensor_filter}
+    )
+    SELECT
+        a.day,
+        COALESCE(b.breached, FALSE) AS breached
+    FROM all_days a
+    LEFT JOIN day_breach b ON a.day = b.day
+    ORDER BY a.day
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    out: list[dict] = []
+    for day, breached in rows:
+        out.append(
+            {
+                "day": day.isoformat(),
+                "breach": bool(breached),
+                "status": "FAIL" if breached else "PASS",
+            }
+        )
+    return out
+
+
 def _day_bounds(day: str) -> tuple[datetime, datetime]:
     d = datetime.fromisoformat(day).replace(tzinfo=timezone.utc)
     start = d.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -172,6 +318,10 @@ def excursions_naive(conn: psycopg.Connection, day: str) -> list[Excursion]:
 # aggregate: a gaps-and-islands query that groups contiguous over-threshold
 # minute buckets into islands, then keeps islands lasting at least the sustain
 # window. No Python row loop; the engine returns finished excursions.
+#
+# The buckets CTE carries an optional sensor filter. When %(sensor_id)s is NULL
+# the filter is a no-op (all sensors); when it is a value the scan is limited to
+# that one sensor. The value is always parameterized, never string-built.
 HEAVY_SQL = """
 WITH buckets AS (
     SELECT
@@ -181,6 +331,7 @@ WITH buckets AS (
         (max_temp > %(threshold)s) AS over
     FROM readings_1min
     WHERE bucket >= %(start)s AND bucket < %(end)s
+      AND (%(sensor_id)s::text IS NULL OR sensor_id = %(sensor_id)s::text)
 ),
 edges AS (
     SELECT
@@ -222,12 +373,19 @@ ORDER BY sensor_id, start_b
 """
 
 
-def excursions(conn: psycopg.Connection, day: str) -> list[Excursion]:
+def excursions(
+    conn: psycopg.Connection, day: str, sensor_id: str | None = None
+) -> list[Excursion]:
     """Heavy path. Read the continuous aggregate (per-minute time_bucket rollup)
     and compute sustained excursions entirely in SQL with a gaps-and-islands
     window query. The engine does the bucketing, the max-per-bucket reduction,
     the island grouping, and the duration math. Python only shapes the finished
-    rows."""
+    rows.
+
+    sensor_id is optional. When None (the default, and the historical behaviour)
+    all sensors in the day are considered. When given, the scan is limited to
+    that one sensor via a parameterized filter in the buckets CTE. The caller is
+    responsible for validating sensor_id before it reaches here."""
     start, end = _day_bounds(day)
     with conn.cursor() as cur:
         cur.execute(
@@ -237,6 +395,7 @@ def excursions(conn: psycopg.Connection, day: str) -> list[Excursion]:
                 "sustain": SUSTAIN_MIN,
                 "start": start,
                 "end": end,
+                "sensor_id": sensor_id,
             },
         )
         rows = cur.fetchall()

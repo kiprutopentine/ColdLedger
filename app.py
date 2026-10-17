@@ -24,11 +24,21 @@ app = FastAPI(title="Baridi")
 THRESHOLD = float(os.environ.get("BREACH_THRESHOLD_C", "5.0"))
 SUSTAIN = int(os.environ.get("BREACH_SUSTAIN_MINUTES", "10"))
 
+# The featured day's excursion query is the query the scale stat times live.
+FEATURED_DAY = "2026-10-12"
+
 # Strict calendar-day format: YYYY-MM-DD only. Anything else is a clean 400,
 # not a 500 from datetime.fromisoformat choking on a datetime/timezone string
 # or an out-of-range month/day. The regex pins the shape; strptime then
 # confirms it is a real calendar date (rejects e.g. 2026-13-99).
 _DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Strict sensor-id shape: lowercase letters, digits, and hyphens only, 1..40
+# chars. This rejects path traversal ("../bad"), SQL metacharacters, spaces,
+# and anything else before the value is ever handed to the DB layer. The value
+# is still passed to psycopg as a bound parameter, never interpolated; this
+# allowlist is defence in depth and the source of the clean 400.
+_SENSOR_RE = re.compile(r"^[a-z0-9-]{1,40}$")
 
 
 def _valid_day(day: str) -> bool:
@@ -39,6 +49,10 @@ def _valid_day(day: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _valid_sensor(sensor_id: str) -> bool:
+    return bool(_SENSOR_RE.match(sensor_id))
 
 # Per-IP in-process sliding-window rate limit for /api/timeline.
 # Best-effort, single-worker (see the uvicorn unit: --workers 1): keep a deque
@@ -76,38 +90,170 @@ def _rate_limited(ip: str) -> bool:
         return False
 
 
+def _rate_limit_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"error": "rate limit exceeded; retry later"},
+        headers={"Retry-After": str(int(_RATE_WINDOW))},
+    )
+
+
+def _db_error_response() -> JSONResponse:
+    """Generic 500 for an unexpected DB/runtime failure. Never leaks a stack
+    trace or driver message to the caller; the detail stays in the server log."""
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal error computing result"},
+    )
+
+
 @app.get("/api/timeline")
-def timeline(request: Request, day: str = "2026-10-12") -> JSONResponse:
+def timeline(
+    request: Request, day: str = "2026-10-12", sensor_id: str | None = None
+) -> JSONResponse:
     ip = _client_ip(request)
     if _rate_limited(ip):
-        return JSONResponse(
-            status_code=429,
-            content={"error": "rate limit exceeded; retry later"},
-            headers={"Retry-After": str(int(_RATE_WINDOW))},
-        )
+        return _rate_limit_response()
 
+    # Validate every input BEFORE any DB call so bad input is always a clean
+    # 400, never a 500.
     if not _valid_day(day):
         return JSONResponse(
             status_code=400,
             content={"error": "day must be a valid YYYY-MM-DD date"},
         )
+    if sensor_id is not None and not _valid_sensor(sensor_id):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "sensor_id must match ^[a-z0-9-]{1,40}$"},
+        )
 
-    conn = store.connect()
-    exs = [e.as_dict() for e in store.excursions(conn, day)]
+    try:
+        conn = store.connect()
+        exs = [e.as_dict() for e in store.excursions(conn, day, sensor_id)]
+    except Exception:
+        return _db_error_response()
+
     total_min = sum(e["minutes_over"] for e in exs)
     headline = (
         f"{len(exs)} excursion{'s' if len(exs) != 1 else ''} over "
         f"{THRESHOLD:g}C, {total_min} min total"
     )
+    body = {
+        "day": day,
+        "threshold_c": THRESHOLD,
+        "sustain_minutes": SUSTAIN,
+        "headline": headline,
+        "excursions": exs,
+        "disclaimer": (
+            "A logging and alert aid, not a certified compliance record."
+        ),
+    }
+    # Only surface the sensor_id key when the caller supplied one, so the
+    # default (no sensor_id) response shape is byte-for-byte unchanged.
+    if sensor_id is not None:
+        body["sensor_id"] = sensor_id
+    return JSONResponse(body)
+
+
+@app.get("/api/sensors")
+def sensors(request: Request) -> JSONResponse:
+    """List every sensor in the DB with its reading count and timestamp range,
+    flagged demo vs scale ballast. Also returns the demo sensor ids alone so a
+    UI can default to the three honest sensors and hide the bench-* ballast."""
+    ip = _client_ip(request)
+    if _rate_limited(ip):
+        return _rate_limit_response()
+    try:
+        conn = store.connect()
+        all_sensors = store.sensor_summary(conn)
+    except Exception:
+        return _db_error_response()
+
+    demo = [s for s in all_sensors if s["demo"]]
     return JSONResponse(
         {
-            "day": day,
-            "threshold_c": THRESHOLD,
-            "sustain_minutes": SUSTAIN,
-            "headline": headline,
-            "excursions": exs,
+            "sensors": all_sensors,
+            "demo_sensors": [s["sensor_id"] for s in demo],
             "disclaimer": (
-                "A logging and alert aid, not a certified compliance record."
+                "Synthetic sensor data. bench-* sensors are scale-test "
+                "ballast, not part of the demo."
+            ),
+        }
+    )
+
+
+@app.get("/api/days")
+def days(request: Request, sensor_id: str | None = None) -> JSONResponse:
+    """List available calendar days annotated PASS/FAIL (whether any sustained
+    breach occurred). With sensor_id, restrict to that sensor; without it, cover
+    the three demo sensors. Expensive aggregate query, so rate limited."""
+    ip = _client_ip(request)
+    if _rate_limited(ip):
+        return _rate_limit_response()
+
+    if sensor_id is not None and not _valid_sensor(sensor_id):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "sensor_id must match ^[a-z0-9-]{1,40}$"},
+        )
+
+    try:
+        conn = store.connect()
+        day_rows = store.available_days(conn, sensor_id)
+    except Exception:
+        return _db_error_response()
+
+    body: dict = {
+        "days": day_rows,
+        "disclaimer": (
+            "Synthetic sensor data. PASS/FAIL reflects the 5C threshold over a "
+            "10-minute sustain window."
+        ),
+    }
+    if sensor_id is not None:
+        body["sensor_id"] = sensor_id
+    return JSONResponse(body)
+
+
+@app.get("/api/scale")
+def scale(request: Request) -> JSONResponse:
+    """Real measured scale stats: total readings, distinct sensor count, overall
+    date range, and a LIVE-measured query time (ms) for the featured day's
+    excursion query. The ms is measured here with perf_counter, best of a few
+    runs (like bench_query_only.py), never a hardcoded constant. Rate limited."""
+    ip = _client_ip(request)
+    if _rate_limited(ip):
+        return _rate_limit_response()
+
+    try:
+        conn = store.connect()
+        total = store.row_count(conn)
+        n_sensors = store.distinct_sensor_count(conn)
+        first_ts, last_ts = store.date_range(conn)
+        # Time the heavy excursion query for the featured day, best of 5 runs.
+        best_ms: float | None = None
+        for _ in range(5):
+            t0 = time.perf_counter()
+            store.excursions(conn, FEATURED_DAY)
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            if best_ms is None or elapsed_ms < best_ms:
+                best_ms = elapsed_ms
+    except Exception:
+        return _db_error_response()
+
+    return JSONResponse(
+        {
+            "total_readings": total,
+            "sensor_count": n_sensors,
+            "first_ts": first_ts,
+            "last_ts": last_ts,
+            "featured_day": FEATURED_DAY,
+            "featured_query_ms": round(best_ms, 3) if best_ms is not None else None,
+            "query_runs": 5,
+            "disclaimer": (
+                "Synthetic sensor data. featured_query_ms is measured live on "
+                "this request, not a fixed number."
             ),
         }
     )
