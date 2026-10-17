@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baridi, cold-chain breach logging</title>
+<style>
+  /* ============================================================
+     Baridi: Timescale design system
+     "engineering blueprint on warm graph paper"
+     Light, near-monochrome, neo-brutalist. Carbon does all
+     structure; a single signal-orange encodes "needs attention".
+     Fonts self-hosted under /static/fonts (offline-safe), with
+     system sans/mono fallbacks. Shared with the dashboard page.
+     ============================================================ */
+
+  /* --- Self-hosted fonts (served by FastAPI /static mount) --- */
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-SemiBold.woff2') format('woff2');
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist';
+    src: url('/static/fonts/Geist-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Medium.woff2') format('woff2');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-SemiBold.woff2') format('woff2');
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('/static/fonts/GeistMono-Bold.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+
+  :root {
+    /* Colors: achromatic structure + one emphasis color */
+    --paper:    #fafafa;   /* canvas + card surfaces, never pure white */
+    --carbon:   #000000;   /* all structure: text, borders, shadows, fills */
+    --graphite: #242424;   /* darker surface variant (footnote) */
+    --steel:    #6c6c6c;   /* secondary text, subdued labels */
+    --ash:      #b3b3b3;   /* tertiary text, placeholders, light dividers */
+    --paper-2:  #f0f0ee;   /* subtle inset / skeleton base */
+    /* Signal orange = EMPHASIS ONLY (never a button fill, never body text):
+       breach count, over-threshold peaks, sustained durations. */
+    --signal:   #ff5b29;
+
+    --font-geist: 'Geist', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono:  'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    --radius-card: 12px;
+    --radius-pill: 9999px;
+    --radius-btn:  4px;
+    --shadow-hard: 5px 5px 0px #000;   /* signature hard offset, no blur */
+    --border-hair: 1px solid var(--carbon);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { background: var(--paper); }
+
+  body {
+    margin: 0;
+    font-family: var(--font-geist);
+    color: var(--carbon);
+    line-height: 1.5;
+    /* Graph-paper blueprint motif: warm paper + faint carbon dot grid. */
+    background-color: var(--paper);
+    background-image: radial-gradient(rgba(0,0,0,0.055) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: -10px -10px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Shared header / nav (identical on both pages) --- */
+  .topnav {
+    max-width: 880px; margin: 0 auto; padding: 20px 20px 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .topnav .brand {
+    font-family: var(--font-geist); font-weight: 700; font-size: 18px;
+    letter-spacing: -0.02em; color: var(--carbon); text-decoration: none;
+  }
+  .topnav .navlinks { display: flex; gap: 8px; }
+  .topnav .navlinks a {
+    font-family: var(--font-mono); font-weight: 500; font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--steel);
+    text-decoration: none; padding: 7px 14px;
+    border: 1px solid var(--ash); border-radius: var(--radius-pill);
+  }
+  .topnav .navlinks a:hover { color: var(--carbon); border-color: var(--carbon); }
+  .topnav .navlinks a.active { color: var(--carbon); border-color: var(--carbon); }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 72px; }
+
+  /* --- Hero eyebrow + live marker --- */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: var(--radius-pill);
+    background: var(--carbon);
+    display: inline-block;
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  h1 {
+    font-family: var(--font-geist);
+    font-weight: 700;
+    font-size: 44px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 0 0 6px;
+  }
+  .brandline {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 0 0 18px;
+  }
+  .sub { color: var(--steel); margin: 0 0 24px; font-size: 16px; max-width: 52ch; }
+
+  /* --- CTA button (carbon fill, hard offset shadow; orange is never a fill) --- */
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-family: var(--font-geist); font-weight: 600; font-size: 15px;
+    color: var(--paper); background: var(--carbon);
+    border: var(--border-hair); border-radius: var(--radius-btn);
+    box-shadow: var(--shadow-hard);
+    padding: 12px 20px; text-decoration: none; cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .btn:hover { transform: translate(-1px,-1px); box-shadow: 6px 6px 0px #000; }
+  .btn:active { transform: translate(2px,2px); box-shadow: 3px 3px 0px #000; }
+  .btn .arrow { font-family: var(--font-mono); font-weight: 700; }
+  .btn.secondary { color: var(--carbon); background: var(--paper); }
+
+  /* --- Section card (reuses hero/ex card pattern) --- */
+  .section {
+    background: var(--paper);
+    border: var(--border-hair);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard);
+    padding: 24px;
+    margin-top: 22px;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 0 0 12px;
+  }
+  .section h2 {
+    font-family: var(--font-geist);
+    font-weight: 700;
+    font-size: 30px;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+  }
+  .section p { margin: 0 0 14px; max-width: 64ch; }
+  .section p:last-child { margin-bottom: 0; }
+  .section p.narrow { max-width: 52ch; }
+  .emph { color: var(--signal); font-weight: 600; }
+  .emph-mono { font-family: var(--font-mono); font-weight: 700; color: var(--signal); }
+
+  .note {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--steel);
+    background: var(--paper-2);
+    border: 1px solid var(--ash);
+    border-radius: var(--radius-pill);
+    padding: 5px 12px;
+    display: inline-block;
+    margin: 0 0 16px;
+  }
+
+  /* --- How-it-works pipeline steps --- */
+  .steps { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 4px 0 18px; }
+  .step {
+    display: flex; gap: 14px; align-items: flex-start;
+    border: 1px solid var(--ash); border-radius: var(--radius-card);
+    background: var(--paper-2);
+    padding: 14px 16px;
+  }
+  .step .n {
+    font-family: var(--font-mono); font-weight: 700; font-size: 13px;
+    color: var(--carbon);
+    border: var(--border-hair); border-radius: var(--radius-pill);
+    width: 28px; height: 28px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .t { font-family: var(--font-geist); font-weight: 600; font-size: 16px; margin: 2px 0 4px; letter-spacing: -0.01em; }
+  .step .d { color: var(--steel); font-size: 14px; margin: 0; max-width: none; }
+
+  /* --- Honest / open list --- */
+  .facts { list-style: none; margin: 4px 0 0; padding: 0; }
+  .facts li {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 11px 0; border-top: 1px solid var(--ash);
+  }
+  .facts li:first-child { border-top: none; }
+  .facts .mk {
+    font-family: var(--font-mono); font-weight: 700; font-size: 13px;
+    color: var(--carbon); flex: none; margin-top: 1px;
+  }
+  .facts .fx { margin: 0; color: var(--carbon); font-size: 15px; }
+  .facts .fx span { color: var(--steel); }
+
+  /* --- Figure numbers (real replayed-day) --- */
+  .figures { display: flex; flex-wrap: wrap; gap: 8px 10px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--ash); }
+  .figures .tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--steel);
+    background: var(--paper-2);
+    border: 1px solid var(--ash);
+    border-radius: var(--radius-pill);
+    padding: 5px 11px;
+    white-space: nowrap;
+  }
+  .figures .tag b { color: var(--carbon); font-weight: 600; }
+  .figures .tag b.over { color: var(--signal); }
+
+  /* --- Footer disclaimer --- */
+  .disclaimer {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--ash);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    color: var(--steel);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .disclaimer .fn-mark {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--carbon);
+    flex: none;
+    margin-top: 1px;
+  }
+  .brandfoot {
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ash);
+  }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 24px 16px 56px; }
+    h1 { font-size: 34px; }
+    .section { padding: 20px; }
+    .section h2 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<header class="topnav">
+  <a class="brand" href="/">Baridi</a>
+  <nav class="navlinks">
+    <a href="/" class="active">Home</a>
+    <a href="/dashboard">Dashboard</a>
+  </nav>
+</header>
+
+<div class="wrap">
+
+  <!-- Hero -->
+  <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span><span>Live &middot; baridi.tech</span></p>
+  <h1>Baridi</h1>
+  <p class="brandline">Baridi Technologies</p>
+  <p class="sub">Cold-chain temperature logging that flags sustained breaches and keeps the alert even if the process crashes.</p>
+  <div class="cta-row">
+    <a class="btn" href="/dashboard">See the live breach timeline <span class="arrow">&rarr;</span></a>
+  </div>
+
+  <!-- The problem -->
+  <section class="section">
+    <p class="section-label">The clipboard gap</p>
+    <h2>A fridge drifts warm between checks</h2>
+    <span class="note">Dede is a composite user, shown to illustrate the problem.</span>
+    <p>Dede runs a one-person cheese counter. UK FSA HACCP practice expects her to check and record fridge temperatures, so she writes them on a clipboard twice a day. Morning and evening. In between, nobody is watching.</p>
+    <p>A compressor can falter overnight. A door left ajar warms a cabinet for half an hour. The clipboard shows two tidy readings and nothing wrong. An inspector sees the same gap: hours with no record, and no way to prove the cheese stayed cold the whole time.</p>
+    <p class="narrow">Manual checks catch the moment you look. They miss everything that happens when you do not.</p>
+  </section>
+
+  <!-- How it works -->
+  <section class="section">
+    <p class="section-label">How it works</p>
+    <h2>Readings in, breaches flagged, alert that survives a crash</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <div>
+          <p class="t">Readings land continuously</p>
+          <p class="d">Sensor readings stream in and go straight into TimescaleDB, a time-series store built on Postgres.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <div>
+          <p class="t">A continuous aggregate does the math</p>
+          <p class="d">A TimescaleDB continuous aggregate rolls the raw points up by the minute, so the breach query runs over compact buckets instead of every reading.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <div>
+          <p class="t">Excursions get flagged</p>
+          <p class="d">An excursion is counted when a sensor stays over 5C for a sustained stretch of 10 minutes or more. A brief blip when you open the door does not count.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="n">4</span>
+        <div>
+          <p class="t">The alert outlives the process</p>
+          <p class="d">The alert is driven by Temporal, which checkpoints its work. If the process crashes mid-run, Temporal resumes from the last step rather than dropping the alert.</p>
+        </div>
+      </div>
+    </div>
+    <p>Here is one replayed day from the dashboard. Two excursions on fridge-01, <span class="emph-mono">43 min</span> over the line in total.</p>
+    <div class="figures">
+      <span class="tag">DAY&nbsp;<b>2026-10-12</b></span>
+      <span class="tag">EXCURSIONS&nbsp;<b class="over">2</b></span>
+      <span class="tag">PEAK 1&nbsp;<b class="over">9.4C</b>&nbsp;/&nbsp;<b>32 min</b></span>
+      <span class="tag">PEAK 2&nbsp;<b class="over">7.1C</b>&nbsp;/&nbsp;<b>11 min</b></span>
+    </div>
+  </section>
+
+  <!-- Honest / open -->
+  <section class="section">
+    <p class="section-label">Honest by design</p>
+    <h2>Open about what it is, and what it is not</h2>
+    <ul class="facts">
+      <li><span class="mk">01</span><p class="fx">Readings stay in the shop. The database runs on loopback, and Baridi does not sell or ship your data to a third party.</p></li>
+      <li><span class="mk">02</span><p class="fx">The breach math is inspectable SQL. The numbers on the dashboard come from the actual aggregate query, <span>not a hand-typed summary.</span></p></li>
+      <li><span class="mk">03</span><p class="fx">The sparkline is labeled as a presentational indicator. It shows the shape of a breach, not precise per-second telemetry the API does not carry.</p></li>
+      <li><span class="mk">04</span><p class="fx">It is a logging and alert aid. It helps you see and record breaches. It is not a certified compliance record.</p></li>
+    </ul>
+  </section>
+
+  <!-- Second CTA -->
+  <section class="section">
+    <p class="section-label">See it running</p>
+    <h2>The timeline is live right now</h2>
+    <p class="narrow">Open the dashboard to read the replayed day: the two excursions, their peaks, and how long each one stayed over the line.</p>
+    <div class="cta-row">
+      <a class="btn" href="/dashboard">View today's timeline <span class="arrow">&rarr;</span></a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <div class="disclaimer">
+    <span class="fn-mark">&sect;</span>
+    <span>Baridi is a logging and alert aid, not a certified compliance record.</span>
+  </div>
+  <p class="brandfoot">Baridi Technologies</p>
+
+</div>
+</body>
+</html>

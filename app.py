@@ -114,7 +114,12 @@ def timeline(request: Request, day: str = "2026-10-12") -> JSONResponse:
 
 
 @app.get("/")
-def index() -> FileResponse:
+def home() -> FileResponse:
+    return FileResponse(os.path.join("static", "home.html"))
+
+
+@app.get("/dashboard")
+def dashboard() -> FileResponse:
     return FileResponse(os.path.join("static", "index.html"))
 
 

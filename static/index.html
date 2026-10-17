@@ -92,7 +92,26 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  .wrap { max-width: 880px; margin: 0 auto; padding: 48px 20px 72px; }
+  /* --- Shared header / nav (identical on both pages) --- */
+  .topnav {
+    max-width: 880px; margin: 0 auto; padding: 20px 20px 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .topnav .brand {
+    font-family: var(--font-geist); font-weight: 700; font-size: 18px;
+    letter-spacing: -0.02em; color: var(--carbon); text-decoration: none;
+  }
+  .topnav .navlinks { display: flex; gap: 8px; }
+  .topnav .navlinks a {
+    font-family: var(--font-mono); font-weight: 500; font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--steel);
+    text-decoration: none; padding: 7px 14px;
+    border: 1px solid var(--ash); border-radius: var(--radius-pill);
+  }
+  .topnav .navlinks a:hover { color: var(--carbon); border-color: var(--carbon); }
+  .topnav .navlinks a.active { color: var(--carbon); border-color: var(--carbon); }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 72px; }
 
   /* --- Header --- */
   .eyebrow {
@@ -383,6 +402,13 @@
 </style>
 </head>
 <body>
+<header class="topnav">
+  <a class="brand" href="/">Baridi</a>
+  <nav class="navlinks">
+    <a href="/">Home</a>
+    <a href="/dashboard" class="active">Dashboard</a>
+  </nav>
+</header>
 <div class="wrap">
   <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span><span id="live">Live &middot; synced now</span></p>
   <h1>Baridi</h1>
