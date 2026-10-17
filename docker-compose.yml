@@ -2,13 +2,15 @@ services:
   timescaledb:
     image: timescale/timescaledb:latest-pg16
     container_name: coldledger-tsdb
+    restart: unless-stopped
     environment:
       POSTGRES_USER: coldledger
       POSTGRES_PASSWORD: coldledger
       POSTGRES_DB: coldledger
     ports:
       # Host 5433 to avoid clashing with any local Postgres on 5432.
-      - "5433:5432"
+      # Bound to loopback only; never exposed publicly (Caddy + app are the only public surface).
+      - "127.0.0.1:5433:5432"
     volumes:
       - coldledger_tsdata:/var/lib/postgresql/data
     healthcheck:

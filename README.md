@@ -1,11 +1,11 @@
-# ColdLedger
+# Baridi
 
 A cold-chain temperature stream becomes a breach timeline and a durable alert
 log. Replay a day of fridge readings, see every excursion over threshold with
 its start, end, duration, and peak temperature, and get an alert that survives a
 worker crash without firing twice or losing a reading.
 
-ColdLedger is a logging and alert aid, not a certified compliance record.
+Baridi is a logging and alert aid, not a certified compliance record.
 
 ## What it does
 
@@ -117,7 +117,7 @@ NOTES.md              verbatim proofs and build decisions
 
 ## Scope and honesty
 
-- ColdLedger is a logging and alert aid. It is not a certified HACCP record.
+- Baridi is a logging and alert aid. It is not a certified HACCP record.
 - The blip-vs-breach model gate is deferred: the sustain window already rejects
   a single-minute spike, so a model adds nothing the code does not verify. See
   NOTES.md.
